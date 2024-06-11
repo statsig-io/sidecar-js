@@ -264,3 +264,11 @@ if (document.currentScript && document.currentScript.src) {
     );
   }
 }
+
+window.addEventListener('sidecar::run', function(ext) {
+  try {
+    eval(ext.detail);
+  } catch(err) {
+    console.error('Failed to run JS from Sidecar extension', err);
+  }
+});
