@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@statsig/js-client": "^3.0.0",
+    "@statsig/session-replay": "^3.0.0",
     "@statsig/web-analytics": "^3.0.0",
     "install": "^0.13.0",
     "npm": "^10.8.0"
