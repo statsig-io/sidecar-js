@@ -344,8 +344,10 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       }
       this._statsigInstance  = new StatsigClient(apiKey, user, options);
       await this._statsigInstance.initializeAsync();
-      runStatsigSessionReplay(this._statsigInstance);
       runStatsigAutoCapture(this._statsigInstance);
+
+      const sessionReplayOptions = window?.statsigSessionReplayOptions ?? {};
+      runStatsigSessionReplay(this._statsigInstance, sessionReplayOptions);
 
       this._clientInitialized = true;
       this._flushQueuedEvents();
