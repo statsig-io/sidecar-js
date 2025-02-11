@@ -20,7 +20,7 @@ module.exports = {
     minimize: true,
   },
   output: {
-    filename: 'sidecar-js.[contenthash].js',
+    filename: 'index.js',
     path: path.resolve(__dirname, 'dist'),
   },
 };
