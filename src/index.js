@@ -346,8 +346,14 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       await this._statsigInstance.initializeAsync();
       runStatsigAutoCapture(this._statsigInstance);
 
-      const sessionReplayOptions = window?.statsigSessionReplayOptions ?? {};
-      runStatsigSessionReplay(this._statsigInstance, sessionReplayOptions);
+      if (window?.runStatsigSessionReplay || window?.statsigSessionReplayOptions) {
+        if (window?.statsigSessionReplayOptions) {
+          runStatsigSessionReplay(this._statsigInstance, sessionReplayOptions);
+        }
+        else {
+          runStatsigSessionReplay(this._statsigInstance);
+        }
+      }
 
       this._clientInitialized = true;
       this._flushQueuedEvents();
