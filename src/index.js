@@ -346,7 +346,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       await this._statsigInstance.initializeAsync();
       runStatsigAutoCapture(this._statsigInstance);
 
-      if (window?.runStatsigSessionReplay || window?.statsigSessionReplayOptions) {
+      if (window?.runStatsigSessionReplay) {
         if (window?.statsigSessionReplayOptions) {
           runStatsigSessionReplay(this._statsigInstance, sessionReplayOptions);
         }
