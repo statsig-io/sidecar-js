@@ -348,7 +348,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
 
       if (window?.runStatsigSessionReplay === true) {
         if (window?.statsigSessionReplayOptions) {
-          runStatsigSessionReplay(this._statsigInstance, sessionReplayOptions);
+          runStatsigSessionReplay(this._statsigInstance, window?.statsigSessionReplayOptions);
         }
         else {
           runStatsigSessionReplay(this._statsigInstance);
