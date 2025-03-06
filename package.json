@@ -1,6 +1,6 @@
 {
   "name": "statsig-sidecar",
-  "version": "2.0.3",
+  "version": "2.0.4",
   "description": "Statsig helps run simple web experiments by using a no-code visual editor.",
   "jsdelivr": "dist/index.js",
   "main": "dist/index.js",

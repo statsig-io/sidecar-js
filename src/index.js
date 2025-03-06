@@ -6,55 +6,11 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
   _queuedEvents: [],
   _clientInitialized: false,
 
-  getStatsigInstance: function() {
-    return this._statsigInstance;
-  },
-
-  _getMatchingExperiments: function() {
-    const scConfig = this._statsigInstance.getDynamicConfig(
-      'sidecar_dynamic_config',
-    );
-    if (!scConfig) {
-      return null;
+  activateExperiment: function(expId) {
+    const matchedExps = this._getMatchingExperiments();
+    if (matchedExps.some(exp => exp.id === expId)) {
+      StatsigSidecar._performExperiments([expId]);
     }
-    const exps = scConfig.get('activeExperiments', []);
-    const matchingExps = [];
-    let url = window.location.href;
-    try {
-      const u = new URL(url);
-      // This check is important or else it messes up the original URL
-      if (u.searchParams.has('overrideuser')) {
-        u.searchParams.delete('overrideuser');
-      }
-      url = u.toString();
-    } catch (e) {
-    }
-    exps.forEach((exp) => {
-      const filters = exp.filters || [];
-      const filterType = exp.filterType || 'all';
-
-      if (this._isMatchingExperiment(url, filterType, filters)) {
-        matchingExps.push(exp.id);
-      }
-    });
-    return matchingExps;
-  },
-
-  _isMatchingExperiment: function(url, filterType, filters) {
-    if (filterType === 'all' || filters.length === 0) {
-      return true;
-    }
-    if (filterType === 'contains') {
-      return filters.some((filter) => url.includes(filter));
-    } else if (filterType === 'equals') {
-      return filters.some((filter) => url === filter);
-    } else if (filterType === 'regex') {
-      return filters.some((filter) => RegExp(filter).test(url));
-    } else if (filterType === 'path') {
-      const path = new URL(url).pathname;
-      return filters.some((filter) => path === filter);
-    }
-    return false;
   },
 
   _flushQueuedEvents: function() {
@@ -77,6 +33,56 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     this._statsigInstance.flushEvents();
   },
 
+  _getMatchingExperiments: function() {
+    const matchingExps = [];
+    const scConfig = this._statsigInstance.getDynamicConfig(
+      'sidecar_dynamic_config',
+    );
+    if (!scConfig) {
+      return matchingExps;
+    }
+    const exps = scConfig.get('activeExperiments', []);
+    let url = window.location.href;
+    try {
+      const u = new URL(url);
+      // This check is important or else it messes up the original URL
+      if (u.searchParams.has('overrideuser')) {
+        u.searchParams.delete('overrideuser');
+      }
+      url = u.toString();
+    } catch (e) {
+    }
+    exps.forEach((exp) => {
+      const filters = exp.filters || [];
+      const filterType = exp.filterType || 'all';
+      if (this._isMatchingExperiment(url, filterType, filters)) {
+        matchingExps.push(exp);
+      }
+    });
+    return matchingExps;
+  },
+
+  getStatsigInstance: function() {
+    return this._statsigInstance;
+  },
+
+  _isMatchingExperiment: function(url, filterType, filters) {
+    if (filterType === 'all' || filters.length === 0) {
+      return true;
+    }
+    if (filterType === 'contains') {
+      return filters.some((filter) => url.includes(filter));
+    } else if (filterType === 'equals') {
+      return filters.some((filter) => url === filter);
+    } else if (filterType === 'regex') {
+      return filters.some((filter) => RegExp(filter).test(url));
+    } else if (filterType === 'path') {
+      const path = new URL(url).pathname;
+      return filters.some((filter) => path === filter);
+    }
+    return false;
+  },
+
   _isIOS: function() {
     return /iPad|iPhone|iPod/.test(navigator?.userAgent ?? '');
   },
@@ -91,58 +97,24 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     this._statsigInstance.logEvent(eventName, value, metadata);
   },
 
-  performContentChange: function(query, value) {
-    if (!query) {
-      return;
-    }
-    const element = document.querySelector(query);
-    if (element) {
-      this.observeMutation(element, () => {
-        if (element.innerHTML !== value) {
-          element.innerHTML = value;
-        }
-      });
-    }
+  observeMutation: function(element, modifierFunc) {
+    const config = { attributes: true, childList: true };
+    const callback = (mutationsList, observer) => {
+      setTimeout(() => {
+        modifierFunc();
+      }, 0);
+    };
+    const observer = new MutationObserver(callback);
+    observer.observe(element, config);
+    modifierFunc();
   },
 
-  performReorderElement: function(query, operator, anchorQuery) {
-    if (!query) {
-      return;
-    }
-    const target = document.querySelector(query);
-    const anchor = document.querySelector(anchorQuery);
-    if (!target || !anchor) {
-      return;
-    }
-
-    switch (operator) {
-      case 'before':
-        anchor.before(target);
-        break;
-      case 'after':
-        anchor.after(target);
-        break;
-      case 'first':
-        anchor.prepend(target);
-        break;
-      case 'last':
-        anchor.append(target);
-        break;
-    }
-  },
-
-  performStyleChange: function(query, value) {
-    if (!query) {
-      return;
-    }
-    const element = document.querySelector(query);
-    if (element) {
-      const existingStyle = element.getAttribute('style') || '';
-      const newStyle = `${existingStyle}; ${value}`;
-      this.observeMutation(element, () => {
-        if (element.getAttribute('style') !== newStyle) {
-          element.setAttribute('style', newStyle);
-        }
+  _performAfterLoad: function(callback) {
+    if (/complete|interactive|loaded/.test(document.readyState)) {
+      callback();
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        callback();
       });
     }
   },
@@ -164,18 +136,18 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
   },
 
-  performInjectScript: function(value) {
-    const script = document.createElement('script');
-    script.setAttribute('nonce', this.scriptNonce);
-    script.nonce = this.scriptNonce;
-    script.innerHTML = value;
-    document.head.appendChild(script);
-  },
-
-  performInjectStyle: function(value) {
-    const style = document.createElement('style');
-    style.innerHTML = value;
-    document.head.appendChild(style);
+  performContentChange: function(query, value) {
+    if (!query) {
+      return;
+    }
+    const element = document.querySelector(query);
+    if (element) {
+      this.observeMutation(element, () => {
+        if (element.innerHTML !== value) {
+          element.innerHTML = value;
+        }
+      });
+    }
   },
 
   _performDirective: function(directive) {
@@ -227,16 +199,6 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
   },
 
-  _performAfterLoad: function(callback) {
-    if (/complete|interactive|loaded/.test(document.readyState)) {
-      callback();
-    } else {
-      document.addEventListener('DOMContentLoaded', () => {
-        callback();
-      });
-    }
-  },
-
   _performExperiments: function(expIds) {
     if (Array.isArray(expIds)) {
       expIds.forEach((expId) => {
@@ -253,6 +215,62 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
   },
 
+  performInjectScript: function(value) {
+    const script = document.createElement('script');
+    script.setAttribute('nonce', this.scriptNonce);
+    script.nonce = this.scriptNonce;
+    script.innerHTML = value;
+    document.head.appendChild(script);
+  },
+
+  performInjectStyle: function(value) {
+    const style = document.createElement('style');
+    style.innerHTML = value;
+    document.head.appendChild(style);
+  },
+
+  performReorderElement: function(query, operator, anchorQuery) {
+    if (!query) {
+      return;
+    }
+    const target = document.querySelector(query);
+    const anchor = document.querySelector(anchorQuery);
+    if (!target || !anchor) {
+      return;
+    }
+
+    switch (operator) {
+      case 'before':
+        anchor.before(target);
+        break;
+      case 'after':
+        anchor.after(target);
+        break;
+      case 'first':
+        anchor.prepend(target);
+        break;
+      case 'last':
+        anchor.append(target);
+        break;
+    }
+  },
+
+  performStyleChange: function(query, value) {
+    if (!query) {
+      return;
+    }
+    const element = document.querySelector(query);
+    if (element) {
+      const existingStyle = element.getAttribute('style') || '';
+      const newStyle = `${existingStyle}; ${value}`;
+      this.observeMutation(element, () => {
+        if (element.getAttribute('style') !== newStyle) {
+          element.setAttribute('style', newStyle);
+        }
+      });
+    }
+  },
+
   processEvent: function(event) {
     if (!event || !event.detail) {
       return false;
@@ -263,18 +281,6 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       this.performInjectScript(detail.value);
       return false;
     }
-  },
-
-  observeMutation: function(element, modifierFunc) {
-    const config = { attributes: true, childList: true };
-    const callback = (mutationsList, observer) => {
-      setTimeout(() => {
-        modifierFunc();
-      }, 0);
-    };
-    const observer = new MutationObserver(callback);
-    observer.observe(element, config);
-    modifierFunc();
   },
 
   redirectPage: async function(url) {
@@ -308,6 +314,17 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     if (sbpd) {
       sbpd.parentElement.removeChild(sbpd);
     }
+  },
+
+  _runPreExperimentScripts: function(matchedExps) {
+    matchedExps?.forEach(exp => {
+      if (exp.prerunScript) {
+        const expConfig = this._statsigInstance.getExperiment(exp.id);
+        if (expConfig.ruleID !== 'prestart') {
+          this.performInjectScript(exp.prerunScript);
+        }
+      }
+    });
   },
 
   setupStatsigSdk: async function(
@@ -344,7 +361,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       this._statsigInstance  = new StatsigClient(apiKey, user, options);
       await this._statsigInstance.initializeAsync();
 
-      if (window?.runStatsigAutoCapture !== false) {
+      if (options.disableLogging !== false) {
         runStatsigAutoCapture(this._statsigInstance);
       }
 
@@ -352,7 +369,12 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       this._flushQueuedEvents();
 
       if (!expIds) {
-        expIds = this._getMatchingExperiments();
+        const matchingExps = this._getMatchingExperiments();
+        this._runPreExperimentScripts(matchingExps);
+
+        expIds = matchingExps
+          .filter(exp => !exp.disableAutoRun)
+          .map(exp => exp.id);
       }
       if (expIds) {
         this._performExperiments(expIds);
