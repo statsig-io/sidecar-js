@@ -46,7 +46,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     });
     this._statsigInstance.flush && this._statsigInstance.flush();
   },
-  
+
   _getMatchingExperiments: function() {
     const matchingExps = [];
     const scConfig = this._statsigInstance.getDynamicConfig(
@@ -83,7 +83,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
   _isMatchingExperiment: function(url, filterType, filters) {
     if (filterType === 'all' || filters.length === 0) {
       return true;
-    }    
+    }
     if (filterType === 'contains') {
       return filters.some((filter) => url.includes(filter));
     } else if (filterType === 'equals') {
@@ -173,7 +173,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
           this.performStyleChange(directive.queryPath, directive.value);
         });
         break;
-      
+
       case 'image-change':
         this._performAfterLoad(() => {
           this.performAttributeChange(
@@ -361,24 +361,27 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
 
     try {
       const user = window?.statsigUser ?? (
-        overrideUserID ? { 
+        overrideUserID ? {
             userID: overrideUserID,
             customIDs: { stableID: overrideUserID }
-          } 
+          }
           : {}
       );
       const options = window?.statsigOptions ?? {};
       options.disableLogging = !autoStart;
       if (initUrlOverride || logUrlOverride) {
-        options.networkConfig = { 
+        options.networkConfig = {
           initializeUrl: initUrlOverride,
           logEventUrl: logUrlOverride,
         };
       }
       this._statsigInstance  = new StatsigClient(apiKey, user, options);
       await this._statsigInstance.initializeAsync();
-      runStatsigAutoCapture(this._statsigInstance);
-      
+
+      if (options.disableLogging !== false) {
+        runStatsigAutoCapture(this._statsigInstance);
+      }
+
       this._clientInitialized = true;
       this._flushQueuedEvents();
 
@@ -409,7 +412,7 @@ if (document.currentScript && document.currentScript.src) {
   const multiExpIds = url.searchParams.get('multiexpids');
   const initUrl = url.searchParams.get('initializeurl');
   const logUrl = url.searchParams.get('logeventurl');
-  
+
   const autoStart = url.searchParams.get('autostart') !== '0';
   // Deprecated
   // const autoCapture = url.searchParams.get('autocapture') !== '0';
