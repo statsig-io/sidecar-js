@@ -7,55 +7,25 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
   _queuedEvents: [],
   _clientInitialized: false,
 
-  getStatsigInstance: function() {
-    return this._statsigInstance;
+  activateExperiment: function(expId) {
+    const matchedExps = this._getMatchingExperiments();
+    if (matchedExps.some(exp => exp.id === expId)) {
+      StatsigSidecar._performExperiments([expId]);
+    }
   },
 
-  _getMatchingExperiments: function() {
-    const scConfig = this._statsigInstance.getDynamicConfig(
-      'sidecar_dynamic_config',
-    );
-    if (!scConfig) {
-      return null;
-    }
-    const exps = scConfig.get('activeExperiments', []);
-    const matchingExps = [];
-    let url = window.location.href;
-    try {
-      const u = new URL(url);
-      // This check is important or else it messes up the original URL
-      if (u.searchParams.has('overrideuser')) {
-        u.searchParams.delete('overrideuser');
+  findElementToObserve: function(query) {
+    while (query) {
+      try {
+        const element = document.querySelector(query);
+        if (element) {
+          return element;
+        }
+      } catch (e) {
       }
-      url = u.toString();
-    } catch (e) {
+      query = query.substring(0, query.lastIndexOf('>'));
     }
-    exps.forEach((exp) => {
-      const filters = exp.filters || [];
-      const filterType = exp.filterType || 'all';
-
-      if (this._isMatchingExperiment(url, filterType, filters)) {
-        matchingExps.push(exp.id);
-      }
-    });
-    return matchingExps;
-  },
-
-  _isMatchingExperiment: function(url, filterType, filters) {
-    if (filterType === 'all' || filters.length === 0) {
-      return true;
-    }
-    if (filterType === 'contains') {
-      return filters.some((filter) => url.includes(filter));
-    } else if (filterType === 'equals') {
-      return filters.some((filter) => url === filter);
-    } else if (filterType === 'regex') {
-      return filters.some((filter) => RegExp(filter).test(url));
-    } else if (filterType === 'path') {
-      const path = new URL(url).pathname;
-      return filters.some((filter) => path === filter);
-    }
-    return false;
+    return document.body;
   },
 
   _flushQueuedEvents: function() {
@@ -75,7 +45,57 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
         event.metadata
       );
     });
-    this._statsigInstance.flushEvents();
+    this._statsigInstance.flush && this._statsigInstance.flush();
+  },
+
+  _getMatchingExperiments: function() {
+    const matchingExps = [];
+    const scConfig = this._statsigInstance.getDynamicConfig(
+      'sidecar_dynamic_config',
+    );
+    if (!scConfig) {
+      return matchingExps;
+    }
+    const exps = scConfig.get('activeExperiments', []);
+    let url = window.location.href;
+    try {
+      const u = new URL(url);
+      // This check is important or else it messes up the original URL
+      if (u.searchParams.has('overrideuser')) {
+        u.searchParams.delete('overrideuser');
+      }
+      url = u.toString();
+    } catch (e) {
+    }
+    exps.forEach((exp) => {
+      const filters = exp.filters || [];
+      const filterType = exp.filterType || 'all';
+      if (this._isMatchingExperiment(url, filterType, filters)) {
+        matchingExps.push(exp);
+      }
+    });
+    return matchingExps;
+  },
+
+  getStatsigInstance: function() {
+    return this._statsigInstance;
+  },
+
+  _isMatchingExperiment: function(url, filterType, filters) {
+    if (filterType === 'all' || filters.length === 0) {
+      return true;
+    }
+    if (filterType === 'contains') {
+      return filters.some((filter) => url.includes(filter));
+    } else if (filterType === 'equals') {
+      return filters.some((filter) => url === filter);
+    } else if (filterType === 'regex') {
+      return filters.some((filter) => RegExp(filter).test(url));
+    } else if (filterType === 'path') {
+      const path = new URL(url).pathname;
+      return filters.some((filter) => path === filter);
+    }
+    return false;
   },
 
   _isIOS: function() {
@@ -92,58 +112,24 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     this._statsigInstance.logEvent(eventName, value, metadata);
   },
 
-  performContentChange: function(query, value) {
-    if (!query) {
-      return;
-    }
-    const element = document.querySelector(query);
-    if (element) {
-      this.observeMutation(element, () => {
-        if (element.innerHTML !== value) {
-          element.innerHTML = value;
-        }
-      });
-    }
+  observeMutation: function(element, modifierFunc) {
+    const config = { attributes: true, childList: true };
+    const callback = (mutationsList, observer) => {
+      setTimeout(() => {
+        modifierFunc();
+      }, 0);
+    };
+    const observer = new MutationObserver(callback);
+    observer.observe(element, config);
+    modifierFunc();
   },
 
-  performReorderElement: function(query, operator, anchorQuery) {
-    if (!query) {
-      return;
-    }
-    const target = document.querySelector(query);
-    const anchor = document.querySelector(anchorQuery);
-    if (!target || !anchor) {
-      return;
-    }
-
-    switch (operator) {
-      case 'before':
-        anchor.before(target);
-        break;
-      case 'after':
-        anchor.after(target);
-        break;
-      case 'first':
-        anchor.prepend(target);
-        break;
-      case 'last':
-        anchor.append(target);
-        break;
-    }
-  },
-
-  performStyleChange: function(query, value) {
-    if (!query) {
-      return;
-    }
-    const element = document.querySelector(query);
-    if (element) {
-      const existingStyle = element.getAttribute('style') || '';
-      const newStyle = `${existingStyle}; ${value}`;
-      this.observeMutation(element, () => {
-        if (element.getAttribute('style') !== newStyle) {
-          element.setAttribute('style', newStyle);
-        }
+  _performAfterLoad: function(callback) {
+    if (/complete|interactive|loaded/.test(document.readyState)) {
+      callback();
+    } else {
+      document.addEventListener('DOMContentLoaded', () => {
+        callback();
       });
     }
   },
@@ -152,31 +138,27 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     if (!query) {
       return;
     }
-    const element = document.querySelector(query);
-    if (element) {
-      this.observeMutation(element, () => {
-        if (element.getAttribute(attribute) !== value) {
-          element.setAttribute(attribute, value);
-          removeAttrs?.forEach((attr) => {
-            element.removeAttribute(attr);
-          });
-        }
-      });
+    this.setupMutationObserver(query, () => {
+      const element = document.querySelector(query);
+      if (element && element.getAttribute(attribute) !== value) {
+        element.setAttribute(attribute, value);
+        removeAttrs?.forEach((attr) => {
+          element.removeAttribute(attr);
+        });
+      }
+    });
+  },
+
+  performContentChange: function(query, value) {
+    if (!query) {
+      return;
     }
-  },
-
-  performInjectScript: function(value) {
-    const script = document.createElement('script');
-    script.setAttribute('nonce', this.scriptNonce);
-    script.nonce = this.scriptNonce;
-    script.innerHTML = value;
-    document.head.appendChild(script);
-  },
-
-  performInjectStyle: function(value) {
-    const style = document.createElement('style');
-    style.innerHTML = value;
-    document.head.appendChild(style);
+    this.setupMutationObserver(query, () => {
+      const element = document.querySelector(query);
+      if (element && element.innerHTML !== value) {
+        element.innerHTML = value;
+      }
+    });
   },
 
   _performDirective: function(directive) {
@@ -228,16 +210,6 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
   },
 
-  _performAfterLoad: function(callback) {
-    if (/complete|interactive|loaded/.test(document.readyState)) {
-      callback();
-    } else {
-      document.addEventListener('DOMContentLoaded', () => {
-        callback();
-      });
-    }
-  },
-
   _performExperiments: function(expIds) {
     if (Array.isArray(expIds)) {
       expIds.forEach((expId) => {
@@ -254,6 +226,62 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
   },
 
+  performInjectScript: function(value) {
+    const script = document.createElement('script');
+    script.setAttribute('nonce', this.scriptNonce);
+    script.nonce = this.scriptNonce;
+    script.innerHTML = value;
+    document.head.appendChild(script);
+  },
+
+  performInjectStyle: function(value) {
+    const style = document.createElement('style');
+    style.innerHTML = value;
+    document.head.appendChild(style);
+  },
+
+  performReorderElement: function(query, operator, anchorQuery) {
+    if (!query) {
+      return;
+    }
+    const target = document.querySelector(query);
+    const anchor = document.querySelector(anchorQuery);
+    if (!target || !anchor) {
+      return;
+    }
+
+    switch (operator) {
+      case 'before':
+        anchor.before(target);
+        break;
+      case 'after':
+        anchor.after(target);
+        break;
+      case 'first':
+        anchor.prepend(target);
+        break;
+      case 'last':
+        anchor.append(target);
+        break;
+    }
+  },
+
+  performStyleChange: function(query, value) {
+    if (!query) {
+      return;
+    }
+    this.setupMutationObserver(query, () => {
+      const element = document.querySelector(query);
+      if (element) {
+        const existingStyle = element.getAttribute('style') || '';
+        if (!existingStyle.includes(` ${value}`)) {
+          const newStyle = `${existingStyle}; ${value}`;
+          element.setAttribute('style', newStyle);
+        }
+      }
+    });
+  },
+
   processEvent: function(event) {
     if (!event || !event.detail) {
       return false;
@@ -264,18 +292,6 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       this.performInjectScript(detail.value);
       return false;
     }
-  },
-
-  observeMutation: function(element, modifierFunc) {
-    const config = { attributes: true, childList: true };
-    const callback = (mutationsList, observer) => {
-      setTimeout(() => {
-        modifierFunc();
-      }, 0);
-    };
-    const observer = new MutationObserver(callback);
-    observer.observe(element, config);
-    modifierFunc();
   },
 
   redirectPage: async function(url) {
@@ -308,6 +324,24 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     const sbpd = document.getElementById('__sbpd');
     if (sbpd) {
       sbpd.parentElement.removeChild(sbpd);
+    }
+  },
+
+  _runPreExperimentScripts: function(matchedExps) {
+    matchedExps?.forEach(exp => {
+      if (exp.prerunScript) {
+        const expConfig = this._statsigInstance.getExperiment(exp.id);
+        if (expConfig.ruleID !== 'prestart') {
+          this.performInjectScript(exp.prerunScript);
+        }
+      }
+    });
+  },
+
+  setupMutationObserver: function(query, callback) {
+    const observeElement = this.findElementToObserve(query);
+    if (observeElement) {
+      this.observeMutation(observeElement, callback);
     }
   },
 
@@ -359,7 +393,12 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       this._flushQueuedEvents();
 
       if (!expIds) {
-        expIds = this._getMatchingExperiments();
+        const matchingExps = this._getMatchingExperiments();
+        this._runPreExperimentScripts(matchingExps);
+
+        expIds = matchingExps
+          .filter(exp => !exp.disableAutoRun)
+          .map(exp => exp.id);
       }
       if (expIds) {
         this._performExperiments(expIds);
