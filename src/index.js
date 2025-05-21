@@ -308,12 +308,12 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       }
 
       const newUrl = new URL(url, currentUrl);
-      newUrl.searchParams.set(this._redirKey, '1');
       for (const key of currentUrl.searchParams.keys()) {
         if (!newUrl.searchParams.has(key)) {
           newUrl.searchParams.set(key, currentUrl.searchParams.get(key));
         }
       }
+      newUrl.searchParams.set(this._redirKey, '1');
 
       if (this._isIOS()) {
         await this._statsigInstance.flush();
@@ -366,13 +366,13 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
 
     try {
-      const user = window?.statsigUser ?? (
-        overrideUserID ? { 
-            userID: overrideUserID,
-            customIDs: { stableID: overrideUserID }
-          } 
-          : {}
-      );
+      const user = window?.statsigUser ?? {};
+      if (overrideUserID) { 
+        user.userID = overrideUserID;
+        user.customIDs = user.customIDs || {};
+        user.customIDs.stableID = overrideUserID;
+      }
+      
       const options = window?.statsigOptions ?? {};
       options.disableLogging = !autoStart;
       if (initUrlOverride || logUrlOverride) {
