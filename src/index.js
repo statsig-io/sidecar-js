@@ -5,6 +5,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
   _statsigInstance: null,
   _queuedEvents: [],
   _clientInitialized: false,
+  _redirKey: '_stsgnoredir',
 
   activateExperiment: function(expId) {
     const matchedExps = this._getMatchingExperiments();
@@ -302,7 +303,12 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
 
     try {
       const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.has(this._redirKey)) {
+        return;
+      }
+
       const newUrl = new URL(url, currentUrl);
+      newUrl.searchParams.set(this._redirKey, '1');
       for (const key of currentUrl.searchParams.keys()) {
         if (!newUrl.searchParams.has(key)) {
           newUrl.searchParams.set(key, currentUrl.searchParams.get(key));
