@@ -113,7 +113,13 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
   },
 
   observeMutation: function(element, modifierFunc) {
-    const config = { attributes: true, childList: true };
+    const config = { 
+      attributes: true,
+      childList: true,
+      characterData: true,
+      subtree: true,
+      characterDataOldValue: false
+    };
     const callback = (mutationsList, observer) => {
       setTimeout(() => {
         modifierFunc();
