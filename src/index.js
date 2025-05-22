@@ -250,26 +250,28 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     if (!query) {
       return;
     }
-    const target = document.querySelector(query);
-    const anchor = document.querySelector(anchorQuery);
-    if (!target || !anchor) {
-      return;
-    }
+    this.setupMutationObserver(query, () => {
+      const target = document.querySelector(query);
+      const anchor = document.querySelector(anchorQuery);
+      if (!target || !anchor) {
+        return;
+      }
 
-    switch (operator) {
-      case 'before':
-        anchor.before(target);
-        break;
-      case 'after':
-        anchor.after(target);
-        break;
-      case 'first':
-        anchor.prepend(target);
-        break;
-      case 'last':
-        anchor.append(target);
-        break;
-    }
+      switch (operator) {
+        case 'before':
+          anchor.before(target);
+          break;
+        case 'after':
+          anchor.after(target);
+          break;
+        case 'first':
+          anchor.prepend(target);
+          break;
+        case 'last':
+          anchor.append(target);
+          break;
+      }
+    });
   },
 
   performStyleChange: function(query, value) {
