@@ -112,7 +112,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     this._statsigInstance.logEvent(eventName, value, metadata);
   },
 
-  observeMutation: function(element, modifierFunc) {
+  _observeMutation: function(element, modifierFunc) {
     const config = { 
       attributes: true,
       childList: true,
@@ -128,6 +128,26 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     const observer = new MutationObserver(callback);
     observer.observe(element, config);
     modifierFunc();
+  },
+
+  _observePageChanges: function(expIds) {
+    const ps = history.pushState;
+    const rs = history.replaceState;
+
+    const rerun = () => {
+      StatsigSidecar.runAllExperiments(expIds);
+    };
+
+    history.pushState = function(...n) {
+      ps.apply(history, n);
+      rerun();
+    }
+    history.replaceState = function(...n) {
+      rs.apply(history, n);
+      rerun();
+    }
+    window.addEventListener('hashchange', rerun);
+    window.addEventListener('popstate', rerun);
   },
 
   _performAfterLoad: function(callback) {
@@ -340,6 +360,29 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
     }
   },
 
+  runAllExperiments: function(expIds = null) {
+    if (!expIds) {
+      const matchingExps = this._getMatchingExperiments();
+      this._runPreExperimentScripts(matchingExps);
+
+      expIds = matchingExps
+        .filter(exp => !exp.disableAutoRun)
+        .map(exp => exp.id);
+    }
+
+    if (expIds) {
+      try {
+        this._performExperiments(expIds); 
+      } catch (e) {
+        console.error('Failed to perform experiments:', e);
+      }
+    }
+    this.resetBody();
+    if (window?.postExperimentCallback) {
+      window.postExperimentCallback(this._statsigInstance, expIds);
+    }
+  },
+
   _runPreExperimentScripts: function(matchedExps) {
     matchedExps?.forEach(exp => {
       if (exp.prerunScript) {
@@ -354,7 +397,7 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
   setupMutationObserver: function(query, callback) {
     const observeElement = this.findElementToObserve(query);
     if (observeElement) {
-      this.observeMutation(observeElement, callback);
+      this._observeMutation(observeElement, callback);
     }
   },
 
@@ -395,25 +438,13 @@ window["StatsigSidecar"] = window["StatsigSidecar"] || {
       
       this._clientInitialized = true;
       this._flushQueuedEvents();
-
-      if (!expIds) {
-        const matchingExps = this._getMatchingExperiments();
-        this._runPreExperimentScripts(matchingExps);
-
-        expIds = matchingExps
-          .filter(exp => !exp.disableAutoRun)
-          .map(exp => exp.id);
-      }
-      if (expIds) {
-        this._performExperiments(expIds);
-      }
+      this._observePageChanges(expIds);
+      this.runAllExperiments(expIds);
     } catch (e) {
       console.error('Failed to initialize Statsig:', e);
     }
+    
     this.resetBody();
-    if (window?.postExperimentCallback) {
-      window.postExperimentCallback(this._statsigInstance, expIds);
-    }
   },
 }
 
